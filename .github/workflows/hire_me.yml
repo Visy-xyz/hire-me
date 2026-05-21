@@ -125,6 +125,6 @@ jobs:
           EOF
 
       - name: Push commits
-        run: git push origin main
+        run: git push --force origin main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

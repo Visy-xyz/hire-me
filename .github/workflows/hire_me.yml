@@ -1,4 +1,4 @@
-name: Generate Contribution Art v2
+name: Generate Contribution Art Final
 
 on:
   workflow_dispatch:
@@ -8,9 +8,12 @@ on:
         required: false
         default: 'HIRE ME'
       commits_per_pixel:
-        description: 'Commits per pixel (rekomandohet 15-20)'
+        description: 'Commits per pixel'
         required: false
         default: '15'
+      github_email:
+        description: 'Email-i yt i GitHub (Settings → Emails)'
+        required: true
 
 permissions:
   contents: write
@@ -18,7 +21,6 @@ permissions:
 jobs:
   generate-art:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -30,10 +32,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Gjenero commits per art
+      - name: Gjenero commits
         env:
           ART_TEXT: ${{ github.event.inputs.text || 'HIRE ME' }}
           ART_COMMITS: ${{ github.event.inputs.commits_per_pixel || '15' }}
+          GIT_EMAIL: ${{ github.event.inputs.github_email }}
+          GIT_USER: ${{ github.actor }}
         run: |
           python - <<'EOF'
           import os, subprocess
@@ -41,6 +45,8 @@ jobs:
 
           TEXT             = os.environ.get("ART_TEXT", "HIRE ME")
           COMMITS_PER_CELL = int(os.environ.get("ART_COMMITS", "15"))
+          GIT_EMAIL        = os.environ.get("GIT_EMAIL", "")
+          GIT_USER         = os.environ.get("GIT_USER", "GitHub Action")
 
           FONT = {
               'A':[[0,1,0],[1,0,1],[1,1,1],[1,0,1],[1,0,1]],
@@ -91,37 +97,38 @@ jobs:
           def make_commits(date, n):
               date_str = date.strftime("%Y-%m-%dT12:00:00")
               env = {**os.environ,
-                     "GIT_AUTHOR_DATE": date_str,
-                     "GIT_COMMITTER_DATE": date_str}
+                     "GIT_AUTHOR_DATE":    date_str,
+                     "GIT_COMMITTER_DATE": date_str,
+                     "GIT_AUTHOR_NAME":    GIT_USER,
+                     "GIT_AUTHOR_EMAIL":   GIT_EMAIL,
+                     "GIT_COMMITTER_NAME": GIT_USER,
+                     "GIT_COMMITTER_EMAIL":GIT_EMAIL}
               for i in range(n):
                   subprocess.run(
                       ["git", "commit", "--allow-empty", "-m", f"art {date_str} #{i}"],
                       env=env, check=True, capture_output=True
                   )
 
-          subprocess.run(["git","config","user.email","action@github.com"], check=True)
-          subprocess.run(["git","config","user.name","GitHub Action"],      check=True)
+          subprocess.run(["git","config","user.email", GIT_EMAIL], check=True)
+          subprocess.run(["git","config","user.name",  GIT_USER],  check=True)
 
-          grid      = text_to_grid(TEXT)
+          grid       = text_to_grid(TEXT)
           total_cols = len(grid[0])
-          # Vendos artin të fillojë nga java 2 (lë 1 javë hapësirë në fillim)
-          offset = max(2, (52 - total_cols) // 2)
-          start_sunday = get_start_sunday(offset_weeks=offset)
+          offset     = max(2, (52 - total_cols) // 2)
+          start_sun  = get_start_sunday(offset_weeks=offset)
 
-          print(f"Teksti     : '{TEXT}'")
-          print(f"Kolona     : {total_cols}")
-          print(f"Fillim java: {start_sunday.date()}")
-          print(f"Commits/px : {COMMITS_PER_CELL}")
+          print(f"Teksti : '{TEXT}' | Kolona: {total_cols} | Start: {start_sun.date()}")
+          print(f"Email  : {GIT_EMAIL}")
 
           total = 0
           for col in range(min(total_cols, 52 - offset)):
-              for row in range(5):   # E Hënë → E Premte
+              for row in range(5):
                   if grid[row][col] == 1:
-                      date = start_sunday + timedelta(weeks=col, days=row + 1)
+                      date = start_sun + timedelta(weeks=col, days=row + 1)
                       make_commits(date, COMMITS_PER_CELL)
                       total += COMMITS_PER_CELL
 
-          print(f"\n✅ Gati! {total} commits u krijuan.")
+          print(f"✅ Gati! {total} commits u krijuan.")
           EOF
 
       - name: Push commits
